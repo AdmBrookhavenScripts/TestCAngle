@@ -1,6 +1,6 @@
 spawn(function()
 		local script = workspace.CurrentCamera.CameraSubject.Parent:FindFirstChild("Animate") or (function()
-			local temp = Instance.new("LocalScript", game:GetService("Players").LocalPlayer.Character)
+			local temp = Instance.new("LocalScript", workspace.CurrentCamera.CameraSubject.Parent)
 			temp.Name = "Animate"
 			return temp
 		end)()
