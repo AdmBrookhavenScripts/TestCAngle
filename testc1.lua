@@ -14,6 +14,7 @@ if not game:IsLoaded() then
 end
 
 local vector3zero = Vector3.zero
+local oldpos = workspace.CurrentCamera.CameraSubject.Parent.HumanoidRootPart.CFrame
 
 if not sethiddenproperty then
 	--error("Script is only compatible with environments that have sethiddenproperty")
@@ -456,7 +457,7 @@ local Reanimate = {
 	SmoothCam = true,
 	InfiniteJump = false,
 	ScaleGravity = true,
-	SeatSit = false,
+	SeatSit = true,
 	ToolGrab = true
 }
 local Camera = {
@@ -543,6 +544,56 @@ local Camera = {
     }
 }
 
+local AntiflingHumanoids = {}
+	local AntiflingBaseParts = {}
+	
+	RunService.PreAnimation:Connect(function()
+		for i,v in AntiflingBaseParts do
+			if v:IsDescendantOf(workspace) then
+				v.CanCollide = false
+				v.AssemblyLinearVelocity, v.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+			else
+				table.remove(AntiflingBaseParts, i)
+			end
+		end
+		for i,v in AntiflingHumanoids do
+			if v:IsDescendantOf(workspace) then
+				v.EvaluateStateMachine = false
+			else
+				table.remove(AntiflingHumanoids, i)
+			end
+		end
+	end)
+	local OnBasePart = function(v)
+		if v:IsA("BasePart") then
+			v.CanCollide = false
+			if not table.find(AntiflingBaseParts, v) then
+				table.insert(AntiflingBaseParts, v)
+			end
+		end
+		if v:IsA("Humanoid") then
+			v.EvaluateStateMachine = false
+			if not table.find(AntiflingHumanoids, v) then
+				table.insert(AntiflingHumanoids, v)
+			end
+		end
+	end
+	local OnCharacter = function(character)
+		character.DescendantAdded:Connect(OnBasePart)
+		for _,v in character:GetDescendants() do
+			OnBasePart(v)
+		end
+	end
+	local OnPlayer = function(player)
+		if player == Player then return end
+		player.CharacterAdded:Connect(OnCharacter)
+		if player.Character then OnCharacter(player.Character) end
+	end
+	Players.PlayerAdded:Connect(OnPlayer)
+	for _,player in Players:GetPlayers() do
+		OnPlayer(player)
+	end
+
 Reanimate.Camera = Camera
 Reanimate.Control = Camera.Control
 local function AddToRenderStep(func)
@@ -559,19 +610,8 @@ function Util.LinkDestroyI2C(obj, conn)
 		conn:Disconnect()
 	end)
 end
-local function CreateHumanoidCharacter()
-	local userId = Player.UserId
-
-	local desc = Players:GetHumanoidDescriptionFromUserId(userId)
-	local model = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
-
-	model.Name = "ReanimateCharacter"
-	model.Humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	model.Parent = workspace
-	return model
-end
 function Reanimate.Camera:IsFirstPerson()
-	return self._Zoom <= 1
+	return self._Zoom <= 0.75
 end
 Reanimate.Camera.IsMouseLocked = function(self)
 	return self:IsFirstPerson() or Reanimate.Shiftlocked
@@ -693,6 +733,12 @@ do
 		UserInputService.TextBoxFocusReleased:Connect(resetInputDevices)
 		GuiService.MenuOpened:Connect(resetInputDevices)
 		RunService:BindToRenderStep("Uhhhhhh_Control", Enum.RenderPriority.Input.Value + 1, function(dt)
+		if UserInputService:GetFocusedTextBox() then
+	    self.Inputs:Reset()
+	    self.Move = Vector3.zero
+	    self.Jump = false
+	    return
+        end
 			local screensize = Util.GetScreenSize()
 			self.Move = Vector3.zero
 			if self.Inputs.KB.Up then
@@ -875,10 +921,10 @@ local tltm = 0
 local sltm = (dt or 0) * 3
 			if not self.Scriptable then
 				if self:IsFirstPerson() then
-    tltm = 0 
-elseif self.Zoom < 1.5 * Reanimate.CharacterScale then
-    tltm = 0.2
-end
+					tltm = 1
+				elseif self.Zoom < 1.5 * Reanimate.CharacterScale then
+					tltm = 0.5
+				end
 			end
 			if math.abs(ltm - tltm) <= sltm then
 				ltm = tltm
@@ -1128,40 +1174,43 @@ end
 			TargetCameraOffset = Vector3.new(0, -1.5, 0) + Vector3.new(0, 1.5, 0) * RC:GetScale()
 		end
 		RCHumanoid.CameraOffset = TargetCameraOffset:Lerp(RCHumanoid.CameraOffset, math.exp(-9.8 * dt))
-		local isFirstPerson = Reanimate.Camera:IsFirstPerson()
-if Reanimate.Shiftlocked or isFirstPerson then
-	RCHumanoid.AutoRotate = false
-else
-	RCHumanoid.AutoRotate = true
-end
-if Reanimate.Shiftlocked or isFirstPerson then
-	local camLook = workspace.CurrentCamera.CFrame.LookVector
-	local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+local isFirstPerson = Reanimate.Camera:IsFirstPerson()
 
-	if flatLook.Magnitude > 0 then
-		flatLook = flatLook.Unit
-	
-		if Reanimate.Shiftlocked then
-			RCRootPart.CFrame = CFrame.lookAt(
-				RCRootPart.Position,
-				RCRootPart.Position + flatLook
-			)
-		else
-			RCRootPart.CFrame = RCRootPart.CFrame:Lerp(
-				CFrame.lookAt(
-					RCRootPart.Position,
-					RCRootPart.Position + flatLook
-				),
-				0.25
-			)
-		end
-	end
-end
-		if RCHumanoidState == "Swimming" then
-    RCHumanoid:Move(Reanimate.Camera.CFrame:VectorToWorldSpace(CMove))
+if isFirstPerson then
+    RCHumanoid.AutoRotate = false
+
+    local camLook = workspace.CurrentCamera.CFrame.LookVector
+    local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+
+    if flatLook.Magnitude > 0 then
+        flatLook = flatLook.Unit
+
+        RCRootPart.CFrame = CFrame.new(
+            RCRootPart.Position,
+            RCRootPart.Position + flatLook
+        )
+    end
+
+elseif Reanimate.Shiftlocked then
+    RCHumanoid.AutoRotate = false
+
+    local camLook = workspace.CurrentCamera.CFrame.LookVector
+    local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+
+    if flatLook.Magnitude > 0 then
+        flatLook = flatLook.Unit
+
+        RCRootPart.CFrame = CFrame.new(
+            RCRootPart.Position,
+            RCRootPart.Position + flatLook
+        )
+    end
+
 else
-    RCHumanoid:Move(moveDir)
+    RCHumanoid.AutoRotate = true
 end
+
+RCHumanoid:Move(moveDir)
 		RCHumanoid.Jump = CJump
 		if RCRootPart.Position.Y < FallenPartsDestroyHeight + 3 * Reanimate.CharacterScale then
 			RCRootPart.CFrame = LastSafest
@@ -1186,6 +1235,11 @@ GameCamera.CameraSubject = Reanimate.Character:WaitForChild("Humanoid")
 GameCamera.CameraType = Enum.CameraType.Scriptable
 Reanimate.Camera.Zoom = 12
 Reanimate.Camera._Zoom = 12
+RunService.RenderStepped:Connect(function()
+    if Reanimate.Character and GameCamera.CameraSubject ~= Reanimate.Character:FindFirstChild("Humanoid") then
+        GameCamera.CameraSubject = Reanimate.Character:FindFirstChild("Humanoid")
+    end
+end)
 end
 if parentrealchartofakechar then
 	newChar.Parent = fakeChar
@@ -1500,10 +1554,12 @@ end
 
 finished = true
 
+workspace.CurrentCamera.CameraSubject.Parent.HumanoidRootPart.CFrame = oldpos
+
 if usedefaultanims then
 	if r15rig then
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/somethingsimade/CurrentAngleV2/refs/heads/main/r15anim"))()
 	else
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/somethingsimade/CurrentAngleV2/refs/heads/main/anims"))()
+		loadstring(game:HttpGet("https://github.com/AdmBrookhavenScripts/TestCAngle/raw/refs/heads/main/anims.lua"))()
 	end
 end
