@@ -452,7 +452,7 @@ local Reanimate = {
 	CharacterLTMs = {},
 	CharacterScale = 1,
 	Shiftlocked = false,
-	ShiftlockEnabled = true,
+	ShiftlockEnabled = false,
 	Noclip = false,
 	SmoothCam = true,
 	InfiniteJump = false,
@@ -895,6 +895,9 @@ do
 		MobileShiftlock.Position = UDim2.new(1, -190, 1, -60)
 		MobileShiftlock.Size = UDim2.new(0, 40, 0, 40)
 		MobileShiftlock.Image = states[false]
+		MobileShiftlock.Visible = false
+		MobileShiftlock.Active = false
+		MobileShiftlock.ImageTransparency = 1
 		local state = false
 		AddToRenderStep(function()
 			if state ~= Reanimate.Shiftlocked then
